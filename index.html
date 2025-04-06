@@ -30,22 +30,29 @@
       border-radius: 5px;
       border: 1px solid #ccc;
     }
-    canvas {
-      background: #fff;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      padding: 20px;
-      margin-bottom: 30px;
-    }
+
     .attendance-box {
-      margin-top: 30px;
+      margin: 10px auto 20px;
       text-align: center;
       font-size: 1.1em;
       background: #eaf6ff;
-      padding: 10px;
+      padding: 12px 20px;
       border-radius: 8px;
-      display: inline-block;
+      display: block;
       box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      max-width: 300px;
+      transition: all 0.3s ease-in-out;
+    }
+
+    canvas {
+      width: 60vw;
+      height: 30vh;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      margin: 30px auto;
+      display: block;
     }
   </style>
 </head>
@@ -74,9 +81,13 @@
     </div>
   </div>
 
-  <canvas id="marksChart"></canvas>
+  <!-- Attendance and Roll number display -->
   <div class="attendance-box" id="attendanceDisplay"></div>
 
+  <!-- Main chart -->
+  <canvas id="marksChart"></canvas>
+
+  <!-- Ranking chart -->
   <h2>Student Ranking by Percentage</h2>
   <canvas id="rankingChart"></canvas>
 
@@ -172,7 +183,7 @@
     function drawRankingChart() {
       const students = [...new Set(studentData.map(d => d.Name))];
       const totals = students.map(name => {
-        const rows = studentData.filter(d => d.Name === name);
+        const rows = studentData.filter(d => d.Name === name && d.Class == "9");
         let total = 0, count = 0;
         rows.forEach(row => {
           const marks = parseFloat(row.Marks);
@@ -216,10 +227,19 @@
     }
 
     function updateAttendance(name) {
-      const attendance = studentData.filter(d => d.Name === name).map(d => d.Attendance);
+      const studentRows = studentData.filter(d => d.Name === name);
       const display = document.getElementById('attendanceDisplay');
-      const attendanceValue = attendance.length ? attendance[0] : 'N/A';
-      display.innerHTML = `<strong>Attendance:</strong> ${attendanceValue}`;
+
+      if (studentRows.length) {
+        const roll = studentRows[0].RollNumber || 'N/A';
+        const attendance = studentRows[0].Attendance || 'N/A';
+        display.innerHTML = `
+          <strong>Roll Number:</strong> ${roll}<br>
+          <strong>Attendance:</strong> ${attendance}
+        `;
+      } else {
+        display.innerHTML = `<strong>Roll Number:</strong> N/A<br><strong>Attendance:</strong> N/A`;
+      }
     }
 
     function getRandomColor() {
@@ -238,7 +258,7 @@
     document.getElementById('subjectSelect').addEventListener('change', updateChart);
     document.getElementById('chartType').addEventListener('change', updateChart);
 
-    loadCSV('data.csv').then(data => {
+    loadCSV('output.csv').then(data => {
       studentData = data;
       populateDropdowns(studentData);
       drawChart(filterData(studentData[0].Name, 'all'));
