@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Student Performance Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 30px;
+      background: #f0f4f8;
+      color: #333;
+    }
+    h2 {
+      text-align: center;
+      color: #2c3e50;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      justify-content: center;
+      margin-bottom: 25px;
+    }
+    label {
+      font-weight: bold;
+      margin-right: 5px;
+    }
+    select {
+      padding: 5px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    canvas {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      padding: 20px;
+      margin-bottom: 30px;
+    }
+    .attendance-box {
+      margin-top: 30px;
+      text-align: center;
+      font-size: 1.1em;
+      background: #eaf6ff;
+      padding: 10px;
+      border-radius: 8px;
+      display: inline-block;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <h2>Student Performance Dashboard</h2>
+
+  <div class="controls">
+    <div>
+      <label for="studentSelect">Select Student:</label>
+      <select id="studentSelect"></select>
+    </div>
+
+    <div>
+      <label for="subjectSelect">Select Subject:</label>
+      <select id="subjectSelect">
+        <option value="all">All Subjects</option>
+      </select>
+    </div>
+
+    <div>
+      <label for="chartType">Chart Type:</label>
+      <select id="chartType">
+        <option value="bar">Bar Chart</option>
+        <option value="line">Line Chart</option>
+      </select>
+    </div>
+  </div>
+
+  <canvas id="marksChart"></canvas>
+  <div class="attendance-box" id="attendanceDisplay"></div>
+
+  <h2>Student Ranking by Percentage</h2>
+  <canvas id="rankingChart"></canvas>
+
+  <script>
+    let studentData = [];
+    let chart;
+    let rankChart;
+
+    async function loadCSV(url) {
+      const response = await fetch(url);
+      const data = await response.text();
+      return parseCSV(data);
+    }
+
+    function parseCSV(data) {
+      const lines = data.trim().split('\n');
+      const headers = lines[0].split(',');
+      return lines.slice(1).map(line => {
+        const values = line.split(',');
+        return headers.reduce((obj, key, i) => {
+          obj[key.trim()] = values[i] ? values[i].trim() : '';
+          return obj;
+        }, {});
+      });
+    }
+
+    function populateDropdowns(data) {
+      const students = [...new Set(data.map(d => d.Name))];
+      const studentSelect = document.getElementById('studentSelect');
+      studentSelect.innerHTML = students.map(name => `<option value="${name}">${name}</option>`).join('');
+
+      const subjects = [...new Set(data.map(d => d.Subject))];
+      const subjectSelect = document.getElementById('subjectSelect');
+      subjectSelect.innerHTML = '<option value="all">All Subjects</option>';
+      subjects.forEach(subject => {
+        const opt = document.createElement("option");
+        opt.value = subject;
+        opt.text = subject;
+        subjectSelect.appendChild(opt);
+      });
+    }
+
+    function filterData(name, subject) {
+      return studentData.filter(d => d.Name === name && (subject === 'all' || d.Subject === subject));
+    }
+
+    function drawChart(data, type = 'bar') {
+      const grouped = {};
+      data.forEach(row => {
+        const label = `${row.Exam}`;
+        if (!grouped[row.Class]) grouped[row.Class] = {};
+        if (!grouped[row.Class][label]) grouped[row.Class][label] = {};
+        grouped[row.Class][label][row.Subject] = parseInt(row.Marks) || 0;
+      });
+
+      const classes = Object.keys(grouped);
+      const allLabels = [...new Set(Object.values(grouped).flatMap(c => Object.keys(c)))];
+      const subjects = [...new Set(data.map(d => d.Subject))];
+
+      const datasets = [];
+
+      classes.forEach(cls => {
+        subjects.forEach(subject => {
+          datasets.push({
+            label: `${subject} (Class ${cls})`,
+            data: allLabels.map(label => (grouped[cls][label] ? grouped[cls][label][subject] || 0 : 0)),
+            borderColor: getRandomColor(),
+            backgroundColor: type === 'bar' ? getRandomColor() : 'transparent',
+            fill: false,
+            tension: 0.3
+          });
+        });
+      });
+
+      const ctx = document.getElementById('marksChart').getContext('2d');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: type,
+        data: {
+          labels: allLabels,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: { display: true, text: 'Class 8 vs Class 9 Marks Comparison' },
+            legend: { position: 'bottom' }
+          }
+        }
+      });
+    }
+
+    function drawRankingChart() {
+      const students = [...new Set(studentData.map(d => d.Name))];
+      const totals = students.map(name => {
+        const rows = studentData.filter(d => d.Name === name);
+        let total = 0, count = 0;
+        rows.forEach(row => {
+          const marks = parseFloat(row.Marks);
+          if (!isNaN(marks)) {
+            total += marks;
+            count++;
+          }
+        });
+        const percentage = count > 0 ? total / count : 0;
+        return { name, percentage: parseFloat(percentage.toFixed(2)) };
+      });
+
+      totals.sort((a, b) => b.percentage - a.percentage);
+
+      const ctx = document.getElementById('rankingChart').getContext('2d');
+      if (rankChart) rankChart.destroy();
+      rankChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: totals.map(t => t.name),
+          datasets: [{
+            label: 'Percentage',
+            data: totals.map(t => t.percentage),
+            backgroundColor: totals.map(() => getRandomColor())
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: { display: true, text: 'Student Ranking by Average Percentage' },
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100
+            }
+          }
+        }
+      });
+    }
+
+    function updateAttendance(name) {
+      const attendance = studentData.filter(d => d.Name === name).map(d => d.Attendance);
+      const display = document.getElementById('attendanceDisplay');
+      const attendanceValue = attendance.length ? attendance[0] : 'N/A';
+      display.innerHTML = `<strong>Attendance:</strong> ${attendanceValue}`;
+    }
+
+    function getRandomColor() {
+      return 'hsl(' + Math.floor(Math.random() * 360) + ', 70%, 60%)';
+    }
+
+    function updateChart() {
+      const name = document.getElementById('studentSelect').value;
+      const subject = document.getElementById('subjectSelect').value;
+      const type = document.getElementById('chartType').value;
+      drawChart(filterData(name, subject), type);
+      updateAttendance(name);
+    }
+
+    document.getElementById('studentSelect').addEventListener('change', updateChart);
+    document.getElementById('subjectSelect').addEventListener('change', updateChart);
+    document.getElementById('chartType').addEventListener('change', updateChart);
+
+    loadCSV('data.csv').then(data => {
+      studentData = data;
+      populateDropdowns(studentData);
+      drawChart(filterData(studentData[0].Name, 'all'));
+      updateAttendance(studentData[0].Name);
+      drawRankingChart();
+    });
+  </script>
+</body>
+</html>
